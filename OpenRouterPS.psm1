@@ -5,16 +5,22 @@
     This module provides functionality to make requests to the OpenRouter API,
     which allows access to various large language models.
 
+    Features:
+    - Basic LLM requests
+    - Streaming responses
+    - macOS keychain integration for API key storage
+    - Default model management
+
 .NOTES
     The OpenRouter API key must be stored in the macOS keychain with the service name 'OpenRouter'.
 
 # Installation
     
-    1. Save this file as `OpenRouter.psm1` in a directory of your choice.
+    1. Save this file as `OpenRouterPS.psm1` in a directory of your choice.
     2. Import the module:
     
     ```powershell
-    Import-Module ./path/to/OpenRouter.psm1
+    Import-Module ./path/to/OpenRouterPS.psm1
     ```
 
 # Storing your API key in the macOS keychain
@@ -26,11 +32,33 @@
     security add-generic-password -s "OpenRouter" -a "$(whoami)" -w "your-api-key-here"
     ```
 
+    Alternatively, use the module's function:
+    
+    ```powershell
+    Set-OpenRouterApiKey -ApiKey "your-api-key-here"
+    ```
+
 # Usage
 
     ## Basic usage:
     ```powershell
     New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Tell me a joke"
+    ```
+
+    ## Stream the response to stdout (default behavior):
+    ```powershell
+    New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Tell me a joke" -Stream
+    ```
+
+    ## Stream a longer response and see tokens appear in real-time:
+    ```powershell
+    New-LLMRequest -Model "anthropic/claude-3-sonnet" -Prompt "Write a short story about a robot learning to paint" -Stream -MaxTokens 2000
+    ```
+
+    ## Stream response and also capture the full text (for further processing):
+    ```powershell
+    $fullResponse = New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Give me 5 fun facts about space" -Stream -Return
+    # The response will be streamed to stdout AND stored in $fullResponse
     ```
 
     ## With additional parameters:
@@ -48,6 +76,7 @@
 
     OpenRouter supports a variety of models. Here are some examples:
     
+    - deepseek/deepseek-chat-v3-0324
     - anthropic/claude-3-opus
     - anthropic/claude-3-sonnet
     - anthropic/claude-3-haiku
@@ -81,12 +110,21 @@ function New-LLMRequest {
         The maximum number of tokens to generate in the completion.
     .PARAMETER ReturnFull
         If set, returns the full API response as an object. Otherwise, returns only the text content.
+    .PARAMETER Stream
+        If set, streams the response tokens to stdout as they are received in real-time.
+        By default, streaming mode will not return the response to avoid duplicate output.
+    .PARAMETER Return
+        If set with -Stream, returns the full streamed response in addition to displaying it.
+        This is useful when you want to capture the response in a variable for further processing.
     .EXAMPLE
         New-LLMRequest -Prompt "Tell me a joke"
         # Uses the default LLM model
     .EXAMPLE
-        New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Tell me a joke"
-        # Explicitly specifies the model
+        New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Tell me a joke" -Stream
+        # Uses streaming mode to display tokens as they arrive (without returning the response)
+    .EXAMPLE
+        New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Tell me a joke" -Stream -Return
+        # Streams the response AND captures it in a variable
     .EXAMPLE
         New-LLMRequest -Model "openai/gpt-4" -Prompt "Explain quantum physics" -Temperature 0.7 -MaxTokens 1000
     .EXAMPLE
@@ -107,7 +145,13 @@ function New-LLMRequest {
         [int]$MaxTokens = 1000,
         
         [Parameter(Mandatory = $false)]
-        [switch]$ReturnFull = $false
+        [switch]$ReturnFull = $false,
+        
+        [Parameter(Mandatory = $false)]
+        [switch]$Stream = $false,
+        
+        [Parameter(Mandatory = $false)]
+        [switch]$Return = $false
     )
     
     # Use default model if none specified
@@ -141,26 +185,180 @@ function New-LLMRequest {
         )
         temperature = $Temperature
         max_tokens = $MaxTokens
+        stream = [bool]$Stream
     } | ConvertTo-Json -Depth 10
 
     try {
-        # Make the API call
-        $response = Invoke-RestMethod -Uri $baseUrl -Method Post -Headers $headers -Body $body
+        if ($Stream) {
+            # For streaming, we need to handle the connection differently
+            $streamedResponse = Invoke-StreamingRequest -Uri $baseUrl -Headers $headers -Body $body -ReturnFull:$ReturnFull
+            
+            # Only return the response if Return is explicitly set
+            if ($Return) {
+                return $streamedResponse
+            }
+        }
+        else {
+            # Standard non-streaming request
+            $response = Invoke-RestMethod -Uri $baseUrl -Method Post -Headers $headers -Body $body
 
-        # Return the response based on the ReturnFull parameter
-        if ($ReturnFull) {
-            return $response
-        } else {
-            if ($response.choices -and $response.choices.Count -gt 0) {
-                return $response.choices[0].message.content
+            # Return the response based on the ReturnFull parameter
+            if ($ReturnFull) {
+                return $response
             } else {
-                Write-Error "No content found in the response."
-                return $null
+                if ($response.choices -and $response.choices.Count -gt 0) {
+                    return $response.choices[0].message.content
+                } else {
+                    Write-Error "No content found in the response."
+                    return $null
+                }
             }
         }
     }
     catch {
         Write-Error "Error making request to OpenRouter: $_"
+        return $null
+    }
+}
+
+function Invoke-StreamingRequest {
+    <#
+    .SYNOPSIS
+        Makes a streaming request to the OpenRouter API.
+    .DESCRIPTION
+        Processes a streaming request to the OpenRouter API and outputs tokens as they arrive to stdout.
+        This function handles the Server-Sent Events (SSE) format used by OpenRouter's streaming API.
+    .PARAMETER Uri
+        The URI to send the request to.
+    .PARAMETER Headers
+        The headers to include in the request.
+    .PARAMETER Body
+        The body of the request.
+    .PARAMETER ReturnFull
+        If set, returns the full API response as an object. Otherwise, returns only the text content.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+        
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Headers,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$Body,
+        
+        [Parameter(Mandatory = $false)]
+        [switch]$ReturnFull = $false
+    )
+
+    try {
+        # Create the HTTP request
+        $request = [System.Net.HttpWebRequest]::Create($Uri)
+        $request.Method = "POST"
+        $request.ContentType = "application/json"
+        $request.Accept = "text/event-stream"  # Important for SSE
+        $request.ReadWriteTimeout = 300000     # 5 minutes timeout
+        $request.Timeout = 300000              # 5 minutes timeout
+        
+        # Add headers
+        foreach ($key in $Headers.Keys) {
+            if ($key -ne "Content-Type") {  # Skip Content-Type as it's set above
+                $request.Headers.Add($key, $Headers[$key])
+            }
+        }
+        
+        # Write body to request stream
+        $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
+        $request.ContentLength = $bodyBytes.Length
+        $requestStream = $request.GetRequestStream()
+        $requestStream.Write($bodyBytes, 0, $bodyBytes.Length)
+        $requestStream.Close()
+        
+        # Get response
+        Write-Verbose "Sending streaming request to OpenRouter API..."
+        $response = $request.GetResponse()
+        $responseStream = $response.GetResponseStream()
+        $reader = New-Object System.IO.StreamReader($responseStream)
+        
+        # Prepare to collect full response for ReturnFull option
+        $fullResponse = @()
+        $fullText = ""
+        
+        Write-Verbose "Beginning to process streaming response..."
+        
+        # Process the stream line by line
+        while (-not $reader.EndOfStream) {
+            $line = $reader.ReadLine()
+            
+            # Skip empty lines
+            if ([string]::IsNullOrEmpty($line)) {
+                continue
+            }
+            
+            # Handle server-sent events format
+            if ($line.StartsWith("data:")) {
+                # Extract the data portion
+                $jsonData = $line.Substring(5).Trim()
+                
+                # Skip "[DONE]" message which indicates the end of the stream
+                if ($jsonData -eq "[DONE]") {
+                    Write-Verbose "Received end of stream signal"
+                    break
+                }
+                
+                try {
+                    # Parse the JSON data
+                    $data = $jsonData | ConvertFrom-Json
+                    
+                    if ($ReturnFull) {
+                        $fullResponse += $data
+                    }
+                    
+                    # Extract and display the content
+                    if ($data.choices -and $data.choices.Count -gt 0) {
+                        # Handle delta format (used by OpenAI-compatible APIs)
+                        if ($data.choices[0].PSObject.Properties.Name -contains "delta") {
+                            $content = $data.choices[0].delta.content
+                        }
+                        # Handle standard format (used by some other APIs)
+                        elseif ($data.choices[0].PSObject.Properties.Name -contains "message") {
+                            $content = $data.choices[0].message.content
+                        }
+                        
+                        if (-not [string]::IsNullOrEmpty($content)) {
+                            # Write directly to stdout without buffering
+                            [Console]::Write($content)
+                            $fullText += $content
+                        }
+                    }
+                }
+                catch {
+                    Write-Verbose "Error parsing JSON data: $_"
+                    Write-Verbose "Raw data: $jsonData"
+                }
+            }
+        }
+        
+        # Finish with a newline to ensure proper formatting in the console
+        [Console]::WriteLine()
+        
+        # Close streams
+        $reader.Close()
+        $responseStream.Close()
+        $response.Close()
+        
+        Write-Verbose "Streaming complete. Total characters received: $($fullText.Length)"
+        
+        # Return data based on ReturnFull parameter
+        if ($ReturnFull) {
+            return $fullResponse
+        } else {
+            return $fullText
+        }
+    }
+    catch {
+        Write-Error "Error in streaming request: $_"
         return $null
     }
 }
@@ -193,7 +391,7 @@ function Get-OpenRouterApiKey {
 }
 
 # Module variable to store the default LLM model
-$script:DefaultLLMModel = "anthropic/claude-3-haiku"
+$script:DefaultLLMModel = "deepseek/deepseek-chat-v3-0324:free"
 
 function Set-OpenRouterApiKey {
     <#
