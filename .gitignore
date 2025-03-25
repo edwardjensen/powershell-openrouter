@@ -1,0 +1,50 @@
+# PowerShell
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PowerShell module output
+/output/
+/bin/
+/obj/
+
+# PowerShell module dependencies
+/lib/
+/modules/
+
+# NuGet packages
+*.nupkg
+/packages/
+
+# Test Results
+TestResults/
+*.coverage
+*.coveragexml
+
+# Pester test results
+Test-Pester.xml
+
+# Log files
+*.log
+logs/
+
+# Environment-specific files
+.env
