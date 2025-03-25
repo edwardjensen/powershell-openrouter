@@ -116,6 +116,9 @@ function New-LLMRequest {
     .PARAMETER Return
         If set with -Stream, returns the full streamed response in addition to displaying it.
         This is useful when you want to capture the response in a variable for further processing.
+    .PARAMETER OutFile
+        If specified, writes the response to a Markdown file at the given path using a standardized format.
+        When this parameter is used, output to console will be suppressed unless -Return is also specified.
     .EXAMPLE
         New-LLMRequest -Prompt "Tell me a joke"
         # Uses the default LLM model
@@ -126,9 +129,11 @@ function New-LLMRequest {
         New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Tell me a joke" -Stream -Return
         # Streams the response AND captures it in a variable
     .EXAMPLE
-        New-LLMRequest -Model "openai/gpt-4" -Prompt "Explain quantum physics" -Temperature 0.7 -MaxTokens 1000
+        New-LLMRequest -Model "openai/gpt-4" -Prompt "Explain quantum physics" -OutFile "physics_explanation.md"
+        # Sends the request and saves the response to a Markdown file without displaying in console
     .EXAMPLE
-        New-LLMRequest -Model "google/gemini-pro" -Prompt "Write a poem" -ReturnFull
+        New-LLMRequest -Model "google/gemini-pro" -Prompt "Write a poem" -OutFile "poem.md" -Return
+        # Saves to file AND displays/returns the response
     #>
     [CmdletBinding()]
     param (
@@ -151,7 +156,10 @@ function New-LLMRequest {
         [switch]$Stream = $false,
         
         [Parameter(Mandatory = $false)]
-        [switch]$Return = $false
+        [switch]$Return = $false,
+        
+        [Parameter(Mandatory = $false)]
+        [string]$OutFile
     )
     
     # Use default model if none specified
@@ -189,30 +197,71 @@ function New-LLMRequest {
     } | ConvertTo-Json -Depth 10
 
     try {
+        $responseContent = $null
+        
         if ($Stream) {
             # For streaming, we need to handle the connection differently
-            $streamedResponse = Invoke-StreamingRequest -Uri $baseUrl -Headers $headers -Body $body -ReturnFull:$ReturnFull
+            # If OutFile is specified and Return is not set, suppress stdout output
+            $suppressOutput = -not [string]::IsNullOrEmpty($OutFile) -and -not $Return
+            $streamedResponse = Invoke-StreamingRequest -Uri $baseUrl -Headers $headers -Body $body -ReturnFull:$ReturnFull -SuppressOutput:$suppressOutput
+            
+            # Capture response for OutFile if needed
+            if (-not [string]::IsNullOrEmpty($OutFile)) {
+                $responseContent = $streamedResponse
+            }
             
             # Only return the response if Return is explicitly set
             if ($Return) {
-                return $streamedResponse
+                $responseToReturn = $streamedResponse
             }
         }
         else {
             # Standard non-streaming request
             $response = Invoke-RestMethod -Uri $baseUrl -Method Post -Headers $headers -Body $body
 
-            # Return the response based on the ReturnFull parameter
-            if ($ReturnFull) {
-                return $response
-            } else {
-                if ($response.choices -and $response.choices.Count -gt 0) {
-                    return $response.choices[0].message.content
-                } else {
-                    Write-Error "No content found in the response."
-                    return $null
+            if ($response.choices -and $response.choices.Count -gt 0) {
+                $responseContent = $response.choices[0].message.content
+                
+                # Only output to console if not writing to file, or if Return is explicitly set
+                if ([string]::IsNullOrEmpty($OutFile) -or $Return) {
+                    Write-Output $responseContent
                 }
+            } else {
+                Write-Error "No content found in the response."
+                return $null
             }
+            
+            # Determine what to return
+            if ($ReturnFull) {
+                $responseToReturn = $response
+            } else {
+                $responseToReturn = $responseContent
+            }
+        }
+        
+        # Write to Markdown file if OutFile is specified
+        if (-not [string]::IsNullOrEmpty($OutFile)) {
+            Write-Verbose "Writing response to file: $OutFile"
+            
+            # Create markdown content in the specified format
+            $markdownContent = @"
+$responseContent
+"@
+            
+            # Ensure directory exists
+            $outFileDirectory = Split-Path -Path $OutFile -Parent
+            if ($outFileDirectory -and -not (Test-Path -Path $outFileDirectory)) {
+                New-Item -ItemType Directory -Path $outFileDirectory -Force | Out-Null
+            }
+            
+            # Write content to file
+            Set-Content -Path $OutFile -Value $markdownContent -Encoding UTF8
+            Write-Host "Response saved to $OutFile" -ForegroundColor Green
+        }
+        
+        # Return the appropriate response if not in streaming mode or if Return is set
+        if (-not $Stream -or $Return) {
+            return $responseToReturn
         }
     }
     catch {
@@ -236,6 +285,8 @@ function Invoke-StreamingRequest {
         The body of the request.
     .PARAMETER ReturnFull
         If set, returns the full API response as an object. Otherwise, returns only the text content.
+    .PARAMETER SuppressOutput
+        If set, collects the output but does not write it to stdout. Useful when saving to a file.
     #>
     [CmdletBinding()]
     param (
@@ -249,7 +300,10 @@ function Invoke-StreamingRequest {
         [string]$Body,
         
         [Parameter(Mandatory = $false)]
-        [switch]$ReturnFull = $false
+        [switch]$ReturnFull = $false,
+        
+        [Parameter(Mandatory = $false)]
+        [switch]$SuppressOutput = $false
     )
 
     try {
@@ -327,8 +381,10 @@ function Invoke-StreamingRequest {
                         }
                         
                         if (-not [string]::IsNullOrEmpty($content)) {
-                            # Write directly to stdout without buffering
-                            [Console]::Write($content)
+                            # Only write to stdout if not suppressed
+                            if (-not $SuppressOutput) {
+                                [Console]::Write($content)
+                            }
                             $fullText += $content
                         }
                     }
@@ -341,7 +397,9 @@ function Invoke-StreamingRequest {
         }
         
         # Finish with a newline to ensure proper formatting in the console
-        [Console]::WriteLine()
+        if (-not $SuppressOutput) {
+            [Console]::WriteLine()
+        }
         
         # Close streams
         $reader.Close()

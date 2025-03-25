@@ -35,7 +35,7 @@ Icon
 /packages/
 
 # Test Results
-TestResults/
+TestResults/*
 *.coverage
 *.coveragexml
 
