@@ -116,6 +116,7 @@ function New-LLMRequest {
     .PARAMETER Return
         If set with -Stream, returns the full streamed response in addition to displaying it.
         This is useful when you want to capture the response in a variable for further processing.
+        When used with -OutFile, this will also display the output to console.
     .PARAMETER OutFile
         If specified, writes the response to a Markdown file at the given path using a standardized format.
         When this parameter is used, output to console will be suppressed unless -Return is also specified.
@@ -195,6 +196,9 @@ function New-LLMRequest {
         max_tokens = $MaxTokens
         stream = [bool]$Stream
     } | ConvertTo-Json -Depth 10
+    
+    # Variable to hold the result that will be returned by the function
+    $functionResult = $null
 
     try {
         $responseContent = $null
@@ -206,13 +210,11 @@ function New-LLMRequest {
             $streamedResponse = Invoke-StreamingRequest -Uri $baseUrl -Headers $headers -Body $body -ReturnFull:$ReturnFull -SuppressOutput:$suppressOutput
             
             # Capture response for OutFile if needed
-            if (-not [string]::IsNullOrEmpty($OutFile)) {
-                $responseContent = $streamedResponse
-            }
+            $responseContent = $streamedResponse
             
-            # Only return the response if Return is explicitly set
+            # Set the function result if Return is explicitly set
             if ($Return) {
-                $responseToReturn = $streamedResponse
+                $functionResult = $streamedResponse
             }
         }
         else {
@@ -224,18 +226,23 @@ function New-LLMRequest {
                 
                 # Only output to console if not writing to file, or if Return is explicitly set
                 if ([string]::IsNullOrEmpty($OutFile) -or $Return) {
-                    Write-Output $responseContent
+                    Write-Host $responseContent -NoNewline
+                }
+                
+                # Set the function result
+                if ($ReturnFull) {
+                    $functionResult = $response
+                } else {
+                    $functionResult = $responseContent
                 }
             } else {
-                Write-Error "No content found in the response."
+                # For error cases, only write to error stream if not suppressing output
+                if ([string]::IsNullOrEmpty($OutFile) -or $Return) {
+                    Write-Error "No content found in the response."
+                } else {
+                    Write-Verbose "No content found in the response."
+                }
                 return $null
-            }
-            
-            # Determine what to return
-            if ($ReturnFull) {
-                $responseToReturn = $response
-            } else {
-                $responseToReturn = $responseContent
             }
         }
         
@@ -259,9 +266,14 @@ $responseContent
             Write-Host "Response saved to $OutFile" -ForegroundColor Green
         }
         
-        # Return the appropriate response if not in streaming mode or if Return is set
-        if (-not $Stream -or $Return) {
-            return $responseToReturn
+        # IMPORTANT: Only return a value from the function if we're not in streaming mode
+        # or if Return is explicitly set
+        if ((-not $Stream -or $Return) -and (-not [string]::IsNullOrEmpty($OutFile) -and -not $Return)) {
+            # When writing to a file without Return flag, don't return anything to avoid console output
+            return
+        } elseif (-not $Stream -or $Return) {
+            # Otherwise return the function result
+            return $functionResult
         }
     }
     catch {
