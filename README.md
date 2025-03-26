@@ -1,154 +1,186 @@
 # OpenRouterPS
 
-A PowerShell module for making requests to the OpenRouter API, allowing access to various large language models (LLMs) from a single interface.
+A PowerShell module for interacting with the OpenRouter API, providing access to various AI language models through a simple, consistent interface.
 
 ## Features
 
-- Access multiple AI providers (OpenAI, Anthropic, Google, Mistral, DeepSeek, etc.) through a single API
-- Basic LLM requests with configurable parameters
-- Real-time streaming responses
-- macOS keychain integration for secure API key storage
-- Default model management
+- Make requests to multiple AI models through a unified API
+- Stream responses in real-time as tokens arrive
+- Store API keys securely in the macOS keychain
+- Set default models for quick access
+- Save responses to markdown files
+- Customize request parameters (temperature, max tokens, etc.)
 
 ## Installation
 
-1. Save the module file as `OpenRouterPS.psm1` in a directory of your choice.
-
+1. Save the module file as `OpenRouterPS.psm1` in a directory of your choice
 2. Import the module:
 
 ```powershell
 Import-Module ./path/to/OpenRouterPS.psm1
 ```
 
-For persistent loading, you can add the module to your PowerShell profile or place it in a directory in your `$env:PSModulePath`.
+For permanent installation, place the module in your PowerShell modules directory.
 
-## API Key Setup
+## API Key Management
 
-Before using the module, you need to store your OpenRouter API key in the macOS keychain. You have two options:
+Before using the module, you need to store your OpenRouter API key in the macOS keychain:
 
-### Option 1: Using Terminal
-
-```bash
-security add-generic-password -s "OpenRouter" -a "$(whoami)" -w "your-api-key-here"
-```
-
-### Option 2: Using the Module's Function
+Using the module's built-in function:
 
 ```powershell
 Set-OpenRouterApiKey -ApiKey "your-api-key-here"
 ```
 
-## Usage Examples
+Or using the Terminal directly:
 
-### Basic Usage
+```bash
+security add-generic-password -s "OpenRouter" -a "$(whoami)" -w "your-api-key-here"
+```
+
+## Core Functions
+
+### New-LLMRequest
+
+The primary function for making requests to AI models through OpenRouter.
+
+#### Basic Usage
 
 ```powershell
-# Use the default model
+# Using the default model
 New-LLMRequest -Prompt "Tell me a joke"
 
-# Specify a particular model
+# Specifying a model
 New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Tell me a joke"
 ```
 
-### Streaming Responses
-
-Watch tokens arrive in real-time:
+#### Streaming Responses
 
 ```powershell
-# Stream response to stdout (default behavior with -Stream)
+# Stream the response as tokens arrive
+New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Tell me a joke" -Stream
+
+# Stream a longer response
 New-LLMRequest -Model "anthropic/claude-3-sonnet" -Prompt "Write a short story about a robot learning to paint" -Stream -MaxTokens 2000
 
-# Stream AND capture the complete response
+# Stream and also capture the full response
 $fullResponse = New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Give me 5 fun facts about space" -Stream -Return
 ```
 
-### Advanced Parameters
+#### Customizing Parameters
 
 ```powershell
-# Adjust temperature and token limit
+# Adjust temperature and max tokens
 New-LLMRequest -Model "openai/gpt-4" -Prompt "Explain quantum physics" -Temperature 0.7 -MaxTokens 1000
 
-# Get the full API response object instead of just the content
+# Get the full API response
 $response = New-LLMRequest -Model "google/gemini-pro" -Prompt "Write a poem" -ReturnFull
 $response | ConvertTo-Json -Depth 10
 ```
 
-### Managing Default Models
+#### Saving to Files
 
 ```powershell
-# Set your preferred default model
-Set-DefaultLLM -Model "anthropic/claude-3-haiku"
+# Save response to a markdown file
+New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Write a tutorial on PowerShell" -OutFile "tutorial.md"
 
-# Check which model is currently set as default
+# Save to file AND display in console
+New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Write a tutorial on PowerShell" -OutFile "tutorial.md" -Return
+```
+
+### Parameter Reference
+
+| Parameter | Description |
+|-----------|-------------|
+| `-Model` | The AI model to use (e.g., "anthropic/claude-3-opus") |
+| `-Prompt` | The text prompt to send to the AI |
+| `-Temperature` | Controls randomness in output (0.0-1.0, default: 0.7) |
+| `-MaxTokens` | Maximum number of tokens to generate (default: 1000) |
+| `-ReturnFull` | Return the complete API response object |
+| `-Stream` | Stream tokens as they arrive in real-time |
+| `-Return` | When used with `-Stream`, returns the full response text |
+| `-OutFile` | Save response to a markdown file at the specified path |
+
+### Default Model Management
+
+```powershell
+# Set the default model
+Set-DefaultLLM -Model "anthropic/claude-3-opus"
+
+# Get the current default model
 Get-DefaultLLM
 ```
 
-## Available Models
+## Supported Models
 
-OpenRouter supports a variety of models. Here are some examples:
+OpenRouter supports a variety of AI models including:
 
-- `deepseek/deepseek-chat-v3-0324` - Default model
-- `anthropic/claude-3-opus` - Anthropic's most powerful model
-- `anthropic/claude-3-sonnet` - Balanced performance and cost
-- `anthropic/claude-3-haiku` - Fast and efficient
-- `openai/gpt-4` - OpenAI's GPT-4 base model
-- `openai/gpt-4-turbo` - Faster GPT-4 variant
-- `openai/gpt-3.5-turbo` - Cost-effective option
-- `google/gemini-pro` - Google's Gemini model
-- `google/gemini-1.5-pro` - Latest Gemini version
-- `mistral/mistral-medium` - Mistral AI's medium model
-- `mistral/mistral-large` - Mistral AI's large model
+- deepseek/deepseek-chat-v3-0324
+- anthropic/claude-3-opus
+- anthropic/claude-3-sonnet
+- anthropic/claude-3-haiku
+- openai/gpt-4
+- openai/gpt-4-turbo
+- openai/gpt-3.5-turbo
+- google/gemini-pro
+- google/gemini-1.5-pro
+- mistral/mistral-medium
+- mistral/mistral-large
 
-For a full list of supported models and their capabilities, refer to the [OpenRouter documentation](https://openrouter.ai/docs).
+For a complete list of supported models, see the [OpenRouter documentation](https://openrouter.ai/docs).
 
-## Function Reference
+## Examples
 
-### New-LLMRequest
+### Interactive Storytelling
 
-Makes a request to the OpenRouter API using the specified model and prompt.
+```powershell
+$prompt = @"
+Create a short sci-fi story about a person who discovers they can communicate with technology. 
+The story should have a beginning, middle, and end. 
+Make it approximately 500 words.
+"@
 
-**Parameters:**
+New-LLMRequest -Model "anthropic/claude-3-sonnet" -Prompt $prompt -Stream -MaxTokens 2000
+```
 
-- `-Model`: The name of the LLM model to use (uses default if not specified)
-- `-Prompt`: The prompt to send to the model
-- `-Temperature`: Controls randomness in the response (default: 0.7)
-- `-MaxTokens`: Maximum number of tokens to generate (default: 1000)
-- `-Stream`: Streams the response tokens to stdout as they arrive
-- `-Return`: When used with `-Stream`, captures the full response while streaming
-- `-ReturnFull`: Returns the complete API response object
+### Code Generation
 
-### Set-OpenRouterApiKey
+```powershell
+$codePrompt = @"
+Write a PowerShell function that:
+1. Takes a directory path as input
+2. Recursively finds all files larger than 100MB
+3. Outputs a report with file paths, sizes, and last modified dates
+4. Sorts the results by file size (largest first)
+"@
 
-Stores your OpenRouter API key in the macOS keychain.
+New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt $codePrompt -OutFile "large-files-finder.md"
+```
 
-**Parameters:**
+### Research Assistant
 
-- `-ApiKey`: The OpenRouter API key to store
+```powershell
+$researchPrompt = @"
+I'm researching quantum computing for a presentation. Can you provide:
+1. A simple explanation of quantum computing principles
+2. Key advantages over classical computing
+3. Current limitations and challenges
+4. Potential applications in the next 5-10 years
+"@
 
-### Set-DefaultLLM
+New-LLMRequest -Prompt $researchPrompt -OutFile "quantum-computing-research.md" -Return
+```
 
-Sets the default LLM model to use when no model is specified.
+## Troubleshooting
 
-**Parameters:**
-
-- `-Model`: The name of the LLM model to set as default
-
-### Get-DefaultLLM
-
-Returns the currently configured default LLM model.
-
-## Security Notes
-
-- Your API key is stored securely in the macOS keychain
-- The module automatically retrieves the key when needed
-- No API keys are stored in plaintext in the module or in memory longer than necessary
-
-## Requirements
-
-- PowerShell 7.0 or higher recommended
-- macOS for keychain integration
-- An OpenRouter API key (sign up at [openrouter.ai](https://openrouter.ai))
+- If you encounter HTTP 401 errors, your API key may be invalid or expired
+- For streaming issues, ensure your PowerShell console supports ANSI escape sequences
+- Some models may have usage limits or quotas on the OpenRouter platform
 
 ## License
 
-This project is available as open source under the terms of the MIT License.
+This project is available under the MIT License.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
