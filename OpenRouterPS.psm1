@@ -1062,4 +1062,4 @@ function Get-DefaultLLM {
 }
 
 # Export the public functions
-Export-ModuleMember -Function New-LLMRequest, Set-OpenRouterApiKey, Set-DefaultLLM, Get-DefaultLLM, Get-PlatformType, Set-OpenRouterApiKeyInEnvironment
+Export-ModuleMember -Function New-LLMRequest, Set-OpenRouterApiKey, Set-DefaultLLM, Get-DefaultLLM, Get-PlatformType, Set-OpenRouterApiKeyInEnvironment, Get-OpenRouterApiKey, Get-OpenRouterApiKeyFromEnvironment, Get-OpenRouterApiKeyFromMacOSKeychain, Get-OpenRouterApiKeyFromWindowsCredentialManager, Get-OpenRouterApiKeyFromLinuxSecretService
