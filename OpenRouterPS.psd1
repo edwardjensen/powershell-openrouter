@@ -6,8 +6,7 @@
     ModuleVersion = '0.1.0'
     
     # ID used to uniquely identify this module
-    GUID = '161a4efb-d65a-4a61-93d8-5c001008fa50
-'
+    GUID = '161a4efb-d65a-4a61-93d8-5c001008fa50'
     
     # Author of this module
     Author = 'Edward Jensen'
