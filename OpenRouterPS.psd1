@@ -3,7 +3,7 @@
     RootModule = 'OpenRouterPS.psm1'
     
     # Version number of this module.
-    ModuleVersion = '0.1.0'
+    ModuleVersion = '0.1.1'
     
     # ID used to uniquely identify this module
     GUID = '161a4efb-d65a-4a61-93d8-5c001008fa50'
@@ -48,10 +48,10 @@
             Tags = @('OpenRouter', 'API', 'AI', 'LLM', 'GPT')
             
             # A URL to the license for this module.
-            LicenseUri = 'https://github.com/edwardjensen/OpenRouterPS/blob/main/LICENSE'
+            LicenseUri = 'https://github.com/edwardjensen/powershell-openrouter/blob/main/LICENSE'
             
             # A URL to the main website for this project.
-            ProjectUri = 'https://github.com/edwardjensen/OpenRouterPS'
+            ProjectUri = 'https://github.com/edwardjensen/powershell-openrouter/'
             
             # A URL to an icon representing this module.
             # IconUri = ''
