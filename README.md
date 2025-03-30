@@ -6,10 +6,15 @@ A PowerShell module for interacting with the OpenRouter API, providing access to
 
 - Make requests to multiple AI models through a unified API
 - Stream responses in real-time as tokens arrive
-- Store API keys securely in the macOS keychain
+- Store API keys securely in platform-specific secure storage:
+  - macOS: Keychain
+  - Windows: Credential Manager
+  - Linux: Secret Service API or password-store.org
+  - All platforms: Environment variables as fallback
 - Set default models for quick access
 - Save responses to markdown files
 - Customize request parameters (temperature, max tokens, etc.)
+- Generate image alt text with vision-capable models
 
 ## Installation
 
@@ -24,15 +29,23 @@ For permanent installation, place the module in your PowerShell modules director
 
 ## API Key Management
 
-Before using the module, you need to store your OpenRouter API key in the macOS keychain:
+Before using the module, you need to store your OpenRouter API key:
 
-Using the module's built-in function:
+### Using the module's built-in function (recommended)
 
 ```powershell
+# Store in platform-appropriate secure storage
 Set-OpenRouterApiKey -ApiKey "your-api-key-here"
+
+# Store in environment variable only
+Set-OpenRouterApiKey -ApiKey "your-api-key-here" -UseEnvironmentVariableOnly -Scope "User"
 ```
 
-Or using the Terminal directly:
+Valid scopes for environment variables are "Process" (default), "User", and "Machine".
+
+### Alternative methods for macOS
+
+Using the Terminal directly:
 
 ```bash
 security add-generic-password -s "OpenRouter" -a "$(whoami)" -w "your-api-key-here"
@@ -88,7 +101,24 @@ New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Write a tutorial on Pow
 New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Write a tutorial on PowerShell" -OutFile "tutorial.md" -Return
 ```
 
+### Get-ImageAltText
+
+Generate descriptive alt text for images using vision-capable models.
+
+```powershell
+# Basic usage
+Get-ImageAltText "./my_image.jpg"
+
+# Copy to clipboard automatically
+Get-ImageAltText "./screenshot.png" -CopyToClipboard
+
+# Use a specific model
+Get-ImageAltText "./photo.jpg" -Model "anthropic/claude-3-opus"
+```
+
 ### Parameter Reference
+
+#### New-LLMRequest Parameters
 
 | Parameter | Description |
 |-----------|-------------|
@@ -100,6 +130,14 @@ New-LLMRequest -Model "anthropic/claude-3-opus" -Prompt "Write a tutorial on Pow
 | `-Stream` | Stream tokens as they arrive in real-time |
 | `-Return` | When used with `-Stream`, returns the full response text |
 | `-OutFile` | Save response to a markdown file at the specified path |
+
+#### Get-ImageAltText Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `-ImagePath` | Path to the image file (can be used positionally) |
+| `-Model` | The vision model to use (default: "anthropic/claude-3.7-sonnet") |
+| `-CopyToClipboard` | Automatically copy the generated alt text to clipboard |
 
 ### Default Model Management
 
@@ -171,11 +209,35 @@ I'm researching quantum computing for a presentation. Can you provide:
 New-LLMRequest -Prompt $researchPrompt -OutFile "quantum-computing-research.md" -Return
 ```
 
+### Image Alt Text Generation
+
+```powershell
+# Generate descriptive alt text for a screenshot
+Get-ImageAltText "./ui_screenshot.png" -CopyToClipboard
+
+# Use in a pipeline with other commands
+Get-ChildItem -Path "./blog-images/*.jpg" | ForEach-Object { 
+    $altText = Get-ImageAltText $_.FullName
+    # Do something with the alt text, like adding it to a markdown file
+    "![${altText}]($($_.Name))" | Add-Content -Path "blog-post.md"
+}
+```
+
+## Platform Support
+
+OpenRouterPS is designed to work across platforms:
+
+- **Windows**: Uses Windows Credential Manager for API key storage
+- **macOS**: Uses macOS keychain for API key storage
+- **Linux**: Uses Secret Service API (via secret-tool) or password-store.org
+- **Any Platform**: Can use environment variables when secure storage is unavailable
+
 ## Troubleshooting
 
 - If you encounter HTTP 401 errors, your API key may be invalid or expired
 - For streaming issues, ensure your PowerShell console supports ANSI escape sequences
 - Some models may have usage limits or quotas on the OpenRouter platform
+- If secure storage is unavailable, use `-UseEnvironmentVariableOnly` with `Set-OpenRouterApiKey`
 
 ## License
 
