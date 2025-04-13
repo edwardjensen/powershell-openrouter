@@ -6,4 +6,4 @@
 #>
 
 # Default LLM model to use when no model is specified
-$script:DefaultLLMModel = "meta-llama/llama-4-maverick:free"
+$script:DefaultLLMModel = "deepseek/deepseek-r1-zero:free"
